@@ -1,0 +1,41 @@
+name: APK Build
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r27c
+        continue-on-error: true
+      - name: Build debug APKs
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          if [ -f ./gradlew ] && [ -f ./gradle/wrapper/gradle-wrapper.jar ]; then
+            chmod +x ./gradlew
+            GRADLE="./gradlew"
+          else
+            echo "Wrapper incomplete; using Gradle 8.13 directly"
+            curl -sL https://services.gradle.org/distributions/gradle-8.13-bin.zip -o /tmp/g.zip
+            unzip -q /tmp/g.zip -d /opt
+            GRADLE="/opt/gradle-8.13/bin/gradle"
+          fi
+          $GRADLE assembleDebug --no-daemon --stacktrace || \
+            $GRADLE assembleRelease --no-daemon --stacktrace
+      - name: Locate and upload APKs
+        run: |
+          mkdir -p apks-out
+          find . -path "*/outputs/apk*" -name "*.apk" -exec cp {} apks-out/ ";" || true
+          ls -la apks-out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apks
+          path: apks-out/*.apk
+          if-no-files-found: error
